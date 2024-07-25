@@ -7,18 +7,39 @@ import im       "../lib/odin-imgui"
 import sdl      "vendor:sdl2"
 import gl       "vendor:OpenGL"
 
+import          "core:fmt"
 
-c_search_text   : cstring     = "testing"
+CACHE_SIZE      :: 1 << 10
+DEFAULT_IMG_SIZE: [2]f32: {256, 256}
+
+c_search_text   : cstring     = "test_string"
 running         :             = true
 event           : sdl.Event
+display_list    : [dynamic]Image
 
+image_cache     : map[int]im.TextureID
+thumbnail_size  : [2]f32 = {128, 128}
+
+import fp "core:path/filepath"
 main_loop :: proc() 
 {
+        // is_added := add_image("./test.jpg")
+
+        get_all_images()
+        for img in display_list {
+                image_cache[img.id] = open_image(img.path)
+        }
+
         for running {
                 handle_events()
 
                 imgui_impl_opengl3.NewFrame()
                 imgui_impl_sdl2.NewFrame()
+
+                gl.Viewport(0, 0, i32(io.DisplaySize.x), i32(io.DisplaySize.y))
+                gl.ClearColor(0, 0, 0, 1)
+                gl.Clear(gl.COLOR_BUFFER_BIT)
+
                 im.NewFrame()
 
                 draw_menu_bar(0, 0)
@@ -26,14 +47,13 @@ main_loop :: proc()
                 draw_image_grid(0, 30)
 
                 im.Render()
-                gl.Viewport(0, 0, i32(io.DisplaySize.x), i32(io.DisplaySize.y))
-                gl.ClearColor(0, 0, 0, 1)
-                gl.Clear(gl.COLOR_BUFFER_BIT)
                 imgui_impl_opengl3.RenderDrawData(im.GetDrawData())
-
                 sdl.GL_SwapWindow(window)
         }
 }
+
+image_load_queue : [dynamic]cstring
+selected_files   : [dynamic]cstring
 
 handle_events :: proc() 
 {
@@ -42,10 +62,11 @@ handle_events :: proc()
 
                 #partial switch event.type {
                 case .QUIT: running = false
-                // TODO:
-                case .DROPBEGIN: 
                 case .DROPFILE:
-                case .DROPCOMPLETE:
+                    path := string(event.drop.file)
+                    if add_image(path) {
+                            append(&selected_files, event.drop.file)
+                    }
                 }
         }
 }
@@ -98,6 +119,10 @@ draw_image_grid :: proc(x, y: f32)
                 .NoBringToFrontOnFocus,
         })
         {
+                for img in display_list {
+                        im.Image(image_cache[img.id], thumbnail_size)
+                }
+            
         }
         im.End()
 }

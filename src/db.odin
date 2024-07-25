@@ -2,7 +2,16 @@ package main
 
 import sql      "../lib/odin-sqlite3/sqlite3_wrap"
 
-import "core:time"
+import stb_img  "vendor:stb/image"
+
+import fp       "core:path/filepath"
+import          "core:os"
+import          "core:slice"
+
+import          "core:time"
+import          "core:strings"
+
+import          "core:fmt"
 
 
 db      : ^sql.DB
@@ -15,20 +24,18 @@ Image :: struct {
         width         : int,
         height        : int,
         file_type     : string,
-        date_added    : time.Time,
-        date_modified : time.Time,
+        date_added    : string,
+        date_modified : string,
         use_count     : int,
-        tags          : []ImageTag,
 }
 
 Tag :: struct {
         id            : int,
         name          : string,
-        date_added    : time.Time,
-        date_modified : time.Time,
+        date_added    : string,
+        date_modified : string,
         is_sensitive  : bool,
         use_count     : int,
-        images        : []ImageTag,
 }
 
 ImageTag :: struct {
@@ -43,8 +50,6 @@ init_db :: proc(database_path: cstring)
         assert(err == nil, string(sql.status_explain(err)))
 
         create_tables()
-
-        images := get_all_images()
 }
 
 close_db :: proc() 
@@ -100,27 +105,93 @@ create_tables :: proc() {
         assert(err == nil, string(sql.status_explain(err)))
 }
 
-
-get_all_images :: proc() -> []Image
+deep_copy :: proc(src: Image) -> Image
 {
-        query, _ := sql.sql_bind(db, `
-                SELECT * FROM Images
-                `)
-
-        images : [dynamic]Image
-
-        for image in sql.sql_row(db, query, Image) {
-                append_elem(&images, image)
+        return Image{
+                id            = src.id,
+                path          = strings.clone(src.path),
+                hash          = strings.clone(src.hash),
+                size          = src.size,
+                width         = src.width,
+                height        = src.height,
+                file_type     = strings.clone(src.file_type),
+                date_added    = strings.clone(src.date_added),
+                date_modified = strings.clone(src.date_modified),
+                use_count     = src.use_count,
         }
-
-        return images[:]
 }
 
-add_image :: proc(image: Image)
+get_all_images :: proc()
 {
-        query := `
-                INSERT INTO Images (path, hash, size, width, height, file_type, date_added, date_modified)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        `
-        sql.sql_exec(db, query, image.path, image.hash, image.size, image.width, image.height, image.file_type, image.date_added, image.date_modified)
+        query, _ := sql.sql_bind(db, `SELECT * FROM Images`)
+
+        images : [dynamic]Image
+        clear_dynamic_array(&display_list)
+        for image in sql.sql_row(db, query, Image) {
+                append_elem(&display_list, deep_copy(image))
+        }
+}
+
+ADD_IMAGE_QUERY ::
+`
+INSERT INTO Images (path, hash, size, width, height, file_type, date_added, date_modified)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+`
+
+add_image :: proc(path: string) -> bool
+{
+        path       := fp.abs(path) or_return
+        file_type  := fp.ext(path)
+        if !slice.contains(ALLOWED_EXTENSIONS, file_type) do return false
+        
+        hash       := "hash"
+        width, height: i32
+
+        stb_img.info(
+                strings.clone_to_cstring(path),
+                &width,
+                &height,
+                nil,
+        )
+
+        fd, fd_err := os.open(path, os.O_RDONLY)
+        if  fd_err != os.ERROR_NONE do return false
+
+        size, size_err := os.file_size(fd)
+        if size_err != os.ERROR_NONE do return false
+        
+        file_info, file_info_err:= os.stat(path)
+        if file_info_err != os.ERROR_NONE do return false
+
+        date_added    := time_format(file_info.creation_time)
+        date_modified := date_added
+
+        os.close(fd)
+
+        result := sql.sql_exec(
+                db,
+                ADD_IMAGE_QUERY,
+                strings.clone_to_cstring(path),
+                hash,
+                size,
+                width,
+                height,
+                file_type,
+                date_added,
+                date_modified,
+        )
+
+        return result == .Ok
+}
+
+time_format :: proc(t: time.Time) -> string
+{
+        y := time.year(t)
+        m := cast (int) time.month(t)
+        d := time.day(t)
+        h, min, s := 0, 0, 0
+
+        return fmt.tprintf("%d-%02d-%02d %02d:%02d:%02d",
+                y, m, d, h, min, s
+        )
 }
