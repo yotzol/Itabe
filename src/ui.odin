@@ -10,16 +10,21 @@ import gl       "vendor:OpenGL"
 import          "core:fmt"
 import          "core:strings"
 
-CACHE_SIZE      :: 1 << 10
-DEFAULT_IMG_SIZE: [2]f32: {256, 256}
+CACHE_SIZE       :: 1 << 10
+DEFAULT_IMG_SIZE : [2]f32: {256, 256}
 
-c_search_text   : cstring     = "test_string"
-running         :             = true
-event           : sdl.Event
-display_list    : [dynamic]Image
+c_search_text    : cstring     = "test_string"
 
-image_cache     : map[int]im.TextureID
-thumbnail_size  : [2]f32 = {128, 128}
+event            : sdl.Event
+display_list     : [dynamic]Image
+
+image_cache      : map[int]im.TextureID
+thumbnail_size   : [2]f32 = {128, 128}
+
+image_load_queue : [dynamic]cstring
+selected_files   : [dynamic]cstring
+
+running          := true
 
 main_loop :: proc() 
 {
@@ -50,16 +55,12 @@ main_loop :: proc()
                 im.End()
 
                 im.Render()
-                io = im.GetIO()
                 gl.Viewport(0, 0, i32(io.DisplaySize.x), i32(io.DisplaySize.y))
                 gl.Clear(gl.COLOR_BUFFER_BIT)
                 imgui_impl_opengl3.RenderDrawData(im.GetDrawData())
                 sdl.GL_SwapWindow(window)
         }
 }
-
-image_load_queue : [dynamic]cstring
-selected_files   : [dynamic]cstring
 
 handle_events :: proc() 
 {
@@ -74,7 +75,7 @@ handle_events :: proc()
                                 append(&selected_files, event.drop.file)
                         }
                 case .MOUSEWHEEL:
-                        if !im.IsKeyPressed(im.Key.LeftCtrl) do continue
+                        if !im.IsKeyDown(im.Key.LeftCtrl) do continue
                         switch {
                         //TODO: min and max sizes
                         case event.wheel.y > 0: thumbnail_size *= 2
