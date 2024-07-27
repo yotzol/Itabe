@@ -21,16 +21,17 @@ THUMBNAIL_H : i32 : 512
 open_image :: proc(file_path: string) -> (texture_id: im.TextureID)
 {       
         file_path := strings.clone_to_cstring(file_path)
+
         width, height, channels: i32
         img_data := image.load(file_path, &width, &height, &channels, 4)
-        defer image.image_free(img_data)
 
         texture: u32
         gl.GenTextures(1, &texture)
         gl.BindTexture(gl.TEXTURE_2D, texture)
         gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
         gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
-
+        gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
+        gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
         gl.TexImage2D(
                 gl.TEXTURE_2D, 0, gl.RGBA,
                 width, height, 0,
@@ -38,7 +39,8 @@ open_image :: proc(file_path: string) -> (texture_id: im.TextureID)
                 img_data
         )
         gl.BindTexture(gl.TEXTURE_2D, 0)
+        gl.GenerateMipmap(gl.TEXTURE_2D)
 
-        return cast (rawptr) uintptr(texture)
+        return cast (im.TextureID) uintptr(texture)
 }
 

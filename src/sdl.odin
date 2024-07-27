@@ -44,6 +44,7 @@ init_graphics :: proc()
         im.CreateContext()
         io = im.GetIO()
         io.ConfigFlags += { .NavEnableKeyboard }
+        im.StyleColorsLight()
         im.StyleColorsDark()
 
         imgui_impl_sdl2   .InitForOpenGL(window, gl_ctx)
